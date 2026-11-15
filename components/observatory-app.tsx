@@ -3,7 +3,7 @@
 import { type FormEvent, useMemo, useState } from 'react'
 import useSWR from 'swr'
 import {
-  Activity, AlertCircle, BookOpen, CalendarDays, CheckCircle2, ClipboardList,
+  Activity, AlertCircle, ArrowRight, BookOpen, CalendarDays, CheckCircle2, ClipboardList,
   CloudUpload, FileImage, Flame, LayoutDashboard, LoaderCircle, LogOut, Menu,
   MessageSquareQuote, MessageSquareText, Plus, Search, ShieldCheck, Users, X,
 } from 'lucide-react'
@@ -207,7 +207,6 @@ export function ObservatoryApp({
     )
   }, [registrosList, divisionFilter])
 
-  // Consolidación automática de los símbolos escaneados de todos los mapas filtrados
   const resumenSimbolos = useMemo(() => {
     const totals: Record<string, number> = {}
     mapsPorFiltroCurso.forEach((m) => {
@@ -228,7 +227,6 @@ export function ObservatoryApp({
       .sort((a, b) => b.count - a.count)
   }, [mapsPorFiltroCurso])
 
-  // Hotspots reales extraídos de las capturas del plano seleccionado
   const activePlanHotspots = useMemo(() => {
     const spots: DetectedHotspot[] = []
     mapsPorFiltroCurso
@@ -489,7 +487,6 @@ export function ObservatoryApp({
                     </span>
                   </div>
 
-                  {/* Selector de los 5 planos */}
                   <div className="mt-4 flex flex-wrap gap-2">
                     {resumenPorPlano.map((pl) => (
                       <button
@@ -507,7 +504,6 @@ export function ObservatoryApp({
                     ))}
                   </div>
 
-                  {/* Filtro rápido por tipo de símbolo */}
                   <div className="mt-3 flex flex-wrap gap-1.5">
                     {[
                       { id: 'ALL', label: 'Todos los símbolos' },
