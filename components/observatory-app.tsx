@@ -14,6 +14,7 @@ import {
   type DetectedHotspot,
   extractAutoScan,
   ICONOS_CONVIVENCIA,
+  type ValenceGroup,
 } from '@/components/student-portal'
 
 type Section =
@@ -171,9 +172,8 @@ export function ObservatoryApp({
 
   const [divisionFilter, setDivisionFilter] = useState('TODAS')
   const [heatmapPlano, setHeatmapPlano] = useState(PLANOS_ESCUELA[0].id)
-  const [heatmapCategory, setHeatmapCategory] = useState<'ALL' | DetectedHotspot['category']>('ALL')
+  const [valenceFilter, setValenceFilter] = useState<'ALL' | ValenceGroup>('ALL')
 
-  // Cache de escaneos retroactivos para mapas subidos antes de activar el escáner
   const [retroScans, setRetroScans] = useState<Record<string, AutoScanResult>>({})
   const [scanningRetro, setScanningRetro] = useState(false)
 
@@ -185,7 +185,6 @@ export function ObservatoryApp({
   const [savingProp, setSavingProp] = useState(false)
   const [propMsg, setPropMsg] = useState('')
 
-  // Escanear automáticamente mapas antiguos que no traían [AUTO_SCAN:...] en Sheets
   useEffect(() => {
     if (!maps || maps.length === 0) return
     const sinScan = maps.filter((m) => !extractAutoScan(m.DESCRIPCION) && !retroScans[m.ID_MAPA])
@@ -243,8 +242,10 @@ export function ObservatoryApp({
     )
   }, [registrosList, divisionFilter])
 
-  const resumenSimbolos = useMemo(() => {
+  const { resumenSimbolos, balanceGlobal } = useMemo(() => {
     const totals: Record<string, number> = {}
+    const bal: Record<ValenceGroup, number> = { positivo: 0, atencion: 0, riesgo: 0 }
+
     mapsPorFiltroCurso.forEach((m) => {
       const scan = extractAutoScan(m.DESCRIPCION) || retroScans[m.ID_MAPA]
       if (scan?.counts) {
@@ -252,15 +253,32 @@ export function ObservatoryApp({
           totals[k] = (totals[k] || 0) + Number(val || 0)
         })
       }
+      if (scan?.hotspots) {
+        scan.hotspots.forEach((h) => {
+          bal[h.valence] = (bal[h.valence] || 0) + 1
+        })
+      }
     })
 
-    const relevantIcons = ICONOS_CONVIVENCIA.filter((ic) =>
-      ['espacio_cuidado', 'espacio_transicion', 'espacio_riesgo', 'espacio_dialogo', 'producciones_grafitis'].includes(ic.id)
-    )
+    const trackableIds = [
+      'espacio_cuidado',
+      'cuidado_corazon',
+      'lugar_encuentro',
+      'espacio_dialogo',
+      'iniciativa_proyecto',
+      'espacio_transicion',
+      'requiere_atencion',
+      'producciones_grafitis',
+      'espacio_riesgo',
+      'exclusion_tension',
+    ]
 
-    return relevantIcons
+    const list = ICONOS_CONVIVENCIA
+      .filter((ic) => trackableIds.includes(ic.id))
       .map((ic) => ({ ...ic, count: totals[ic.id] || 0 }))
       .sort((a, b) => b.count - a.count)
+
+    return { resumenSimbolos: list, balanceGlobal: bal }
   }, [mapsPorFiltroCurso, retroScans])
 
   const activePlanHotspots = useMemo(() => {
@@ -271,14 +289,14 @@ export function ObservatoryApp({
         const scan = extractAutoScan(m.DESCRIPCION) || retroScans[m.ID_MAPA]
         if (scan?.hotspots) {
           scan.hotspots.forEach((h) => {
-            if (heatmapCategory === 'ALL' || h.category === heatmapCategory) {
+            if (valenceFilter === 'ALL' || h.valence === valenceFilter) {
               spots.push(h)
             }
           })
         }
       })
     return spots
-  }, [mapsPorFiltroCurso, heatmapPlano, heatmapCategory, retroScans])
+  }, [mapsPorFiltroCurso, heatmapPlano, valenceFilter, retroScans])
 
   const resumenPorPlano = useMemo(() => {
     return PLANOS_ESCUELA.map((pl) => {
@@ -342,13 +360,18 @@ export function ObservatoryApp({
     await refreshAgenda()
   }
 
-  function getHotspotGradient(cat: DetectedHotspot['category'], weight: number) {
-    const alpha = Math.min(0.85, 0.35 + weight * 0.1)
-    if (cat === 'riesgo') return `radial-gradient(circle, rgba(239,68,68,${alpha}) 0%, rgba(239,68,68,0) 72%)`
-    if (cat === 'transicion') return `radial-gradient(circle, rgba(245,158,11,${alpha}) 0%, rgba(245,158,11,0) 72%)`
-    if (cat === 'dialogo') return `radial-gradient(circle, rgba(59,130,246,${alpha}) 0%, rgba(59,130,246,0) 72%)`
-    if (cat === 'produccion') return `radial-gradient(circle, rgba(168,85,247,${alpha}) 0%, rgba(168,85,247,0) 72%)`
+  function getHotspotGradient(valence: ValenceGroup, weight: number) {
+    const alpha = Math.min(0.88, 0.4 + weight * 0.1)
+    if (valence === 'riesgo') return `radial-gradient(circle, rgba(239,68,68,${alpha}) 0%, rgba(239,68,68,0) 72%)`
+    if (valence === 'atencion') return `radial-gradient(circle, rgba(245,158,11,${alpha}) 0%, rgba(245,158,11,0) 72%)`
     return `radial-gradient(circle, rgba(16,185,129,${alpha}) 0%, rgba(16,185,129,0) 72%)`
+  }
+
+  function getBarColor(valence: ValenceGroup, activeCount: number) {
+    if (activeCount === 0) return 'bg-slate-200'
+    if (valence === 'riesgo') return 'bg-red-500'
+    if (valence === 'atencion') return 'bg-amber-500'
+    return 'bg-emerald-600'
   }
 
   return (
@@ -398,7 +421,7 @@ export function ObservatoryApp({
                   <ShieldCheck className="mt-0.5 shrink-0 text-[#356b4f]" size={17} />
                   <div>
                     <p className="text-xs font-semibold text-[#174b38]">Conectado a Google Sheets y Drive institucional</p>
-                    <p className="mt-1 text-xs text-slate-600">Lectura automática de mapas, análisis de 13 preguntas y matrices de jornada en vivo.</p>
+                    <p className="mt-1 text-xs text-slate-600">Lectura automática diferenciada entre símbolos de cuidado/bienestar, atención y tensión.</p>
                   </div>
                 </div>
               )}
@@ -419,7 +442,7 @@ export function ObservatoryApp({
                 <button onClick={() => setActive('Análisis institucional')} className="rounded-xl border border-slate-200 bg-white p-5 text-left transition hover:border-[#56816a] hover:shadow-sm">
                   <Activity size={20} className="text-[#174b38]" />
                   <h2 className="mt-3 text-sm font-semibold">2. Mapas de calor y gráficos</h2>
-                  <p className="mt-1 text-xs leading-5 text-slate-500">Explorar lo que más resalta por curso o en toda la escuela.</p>
+                  <p className="mt-1 text-xs leading-5 text-slate-500">Explorar balance entre cuidado, atención y tensión por curso o escuela.</p>
                 </button>
                 <button onClick={() => setActive('3ra Jornada: Del Mapa a la Acción')} className="rounded-xl border border-slate-200 bg-white p-5 text-left transition hover:border-[#56816a] hover:shadow-sm">
                   <ClipboardList size={20} className="text-[#174b38]" />
@@ -489,17 +512,17 @@ export function ObservatoryApp({
             </>
           )}
 
-          {/* SECCIÓN 3: ANÁLISIS INSTITUCIONAL (HEATMAP AUTOMÁTICO + GRÁFICOS) */}
+          {/* SECCIÓN 3: ANÁLISIS INSTITUCIONAL */}
           {active === 'Análisis institucional' && (
             <div className="space-y-6">
               <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
                 <div>
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.15em] text-[#56816a]">E.E.S.T. N.º 6 · Detección Automática sobre Planos</p>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.15em] text-[#56816a]">E.E.S.T. N.º 6 · Lectura Pedagógica y Visual</p>
                   <h1 className="mt-2 text-[26px] font-semibold tracking-tight">Análisis institucional</h1>
                   <p className="mt-1.5 text-sm text-slate-500">
                     {scanningRetro
                       ? 'Analizando imágenes cargadas...'
-                      : 'Mapas de calor generados automáticamente a partir de los símbolos detectados en las entregas.'}
+                      : 'Diferenciación automática entre espacios de cuidado/bienestar, atención y tensión.'}
                   </p>
                 </div>
                 <div className="flex items-center gap-2">
@@ -511,6 +534,25 @@ export function ObservatoryApp({
                 </div>
               </div>
 
+              {/* Resumen comparativo: Positivos vs. Atención vs. Riesgo */}
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <div className="rounded-xl border border-emerald-200 bg-emerald-50/70 p-4">
+                  <p className="text-xs font-bold text-emerald-900">🟢 Cuidado, Bienestar y Encuentro</p>
+                  <p className="mt-1 text-2xl font-bold text-emerald-800">{balanceGlobal.positivo}</p>
+                  <p className="mt-0.5 text-[11px] text-emerald-700">Incluye 🟢 Espacio cuidado, ❤️ Cuidado, 🤝 Encuentro, 💬 Diálogo y 🌱 Iniciativas</p>
+                </div>
+                <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-4">
+                  <p className="text-xs font-bold text-amber-900">🟡 Transición y Atención</p>
+                  <p className="mt-1 text-2xl font-bold text-amber-800">{balanceGlobal.atencion}</p>
+                  <p className="mt-0.5 text-[11px] text-amber-700">Incluye 🟡 En transición, ⚠️ Requiere atención y 🎨 Producciones / Grafitis</p>
+                </div>
+                <div className="rounded-xl border border-red-200 bg-red-50/70 p-4">
+                  <p className="text-xs font-bold text-red-900">🔴 Riesgo, Exclusión y Tensiones</p>
+                  <p className="mt-1 text-2xl font-bold text-red-800">{balanceGlobal.riesgo}</p>
+                  <p className="mt-0.5 text-[11px] text-red-700">Incluye 🔴 Espacio de riesgo/poco cuidado y 🚫 Exclusión / Rivalidades</p>
+                </div>
+              </div>
+
               <div className="grid gap-5 xl:grid-cols-[1.45fr_1fr]">
                 {/* Mapa de calor real */}
                 <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -519,7 +561,7 @@ export function ObservatoryApp({
                       <Flame size={18} className="text-amber-600" />
                       <div>
                         <h2 className="text-sm font-bold text-slate-900">Mapa de calor por plano</h2>
-                        <p className="text-[11px] text-slate-500">Concentración real de símbolos detectados ({divisionFilter === 'TODAS' ? 'Toda la escuela' : divisionFilter})</p>
+                        <p className="text-[11px] text-slate-500">Distribución espacial según valoración ({divisionFilter === 'TODAS' ? 'Toda la escuela' : divisionFilter})</p>
                       </div>
                     </div>
                     <span className="rounded-full bg-[#edf4ef] px-3 py-1 text-xs font-bold text-[#174b38]">
@@ -544,21 +586,20 @@ export function ObservatoryApp({
                     ))}
                   </div>
 
+                  {/* Filtro por impacto: Positivos vs Atención vs Riesgo */}
                   <div className="mt-3 flex flex-wrap gap-1.5">
                     {[
-                      { id: 'ALL', label: 'Todos los símbolos' },
-                      { id: 'cuidado', label: '🟢 Cuidado' },
-                      { id: 'transicion', label: '🟡 Transición' },
-                      { id: 'riesgo', label: '🔴 Tensión / Riesgo' },
-                      { id: 'dialogo', label: '💬 Diálogo / Digital' },
-                      { id: 'produccion', label: '🎨 Producciones' },
+                      { id: 'ALL', label: 'Ver todos' },
+                      { id: 'positivo', label: '🟢 Cuidado / ❤️ Bienestar' },
+                      { id: 'atencion', label: '🟡 Transición / ⚠️ Atención' },
+                      { id: 'riesgo', label: '🔴 Riesgo / 🚫 Tensión' },
                     ].map((cat) => (
                       <button
                         key={cat.id}
                         type="button"
-                        onClick={() => setHeatmapCategory(cat.id as typeof heatmapCategory)}
-                        className={`rounded-full px-2.5 py-1 text-[11px] font-medium transition ${
-                          heatmapCategory === cat.id
+                        onClick={() => setValenceFilter(cat.id as typeof valenceFilter)}
+                        className={`rounded-full px-3 py-1 text-[11px] font-semibold transition ${
+                          valenceFilter === cat.id
                             ? 'bg-slate-800 text-white'
                             : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                         }`}
@@ -581,7 +622,7 @@ export function ObservatoryApp({
                             width: `${size}px`,
                             height: `${size}px`,
                             transform: 'translate(-50%, -50%)',
-                            background: getHotspotGradient(spot.category, spot.weight),
+                            background: getHotspotGradient(spot.valence, spot.weight),
                           }}
                           className="pointer-events-none absolute rounded-full blur-[3px]"
                         />
@@ -594,23 +635,24 @@ export function ObservatoryApp({
                   </div>
                 </section>
 
+                {/* Gráficos de barras resumidos */}
                 <div className="space-y-5">
                   <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-                    <h2 className="text-sm font-bold text-slate-900">Símbolos detectados automáticamente</h2>
-                    <p className="mt-0.5 text-[11px] text-slate-500">Conteo automático extraído de los planos subidos</p>
-                    <div className="mt-4 space-y-3">
+                    <h2 className="text-sm font-bold text-slate-900">Detalle por símbolo detectado</h2>
+                    <p className="mt-0.5 text-[11px] text-slate-500">Verde = positivo · Amarillo = observación · Rojo = riesgo/tensión</p>
+                    <div className="mt-4 space-y-2.5">
                       {resumenSimbolos.map((ic) => {
                         const pct = ic.count > 0 ? Math.max(10, Math.round((ic.count / maxSimboloCount) * 100)) : 3
                         return (
                           <div key={ic.id}>
                             <div className="flex items-center justify-between text-xs">
                               <span className="font-medium text-slate-700">{ic.emoji} {ic.label}</span>
-                              <span className="font-bold text-[#174b38]">{ic.count}</span>
+                              <span className="font-bold text-slate-900">{ic.count}</span>
                             </div>
-                            <div className="mt-1 h-2.5 w-full overflow-hidden rounded-full bg-slate-100">
+                            <div className="mt-1 h-2 w-full overflow-hidden rounded-full bg-slate-100">
                               <div
                                 style={{ width: `${pct}%` }}
-                                className={`h-full rounded-full transition-all ${ic.count > 0 ? 'bg-[#174b38]' : 'bg-slate-200'}`}
+                                className={`h-full rounded-full transition-all ${getBarColor(ic.valence, ic.count)}`}
                               />
                             </div>
                           </div>
@@ -622,7 +664,7 @@ export function ObservatoryApp({
                   <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
                     <h2 className="text-sm font-bold text-slate-900">Mapas cargados por sector</h2>
                     <p className="mt-0.5 text-[11px] text-slate-500">Distribución por edificio y planta</p>
-                    <div className="mt-4 space-y-3">
+                    <div className="mt-4 space-y-2.5">
                       {resumenPorPlano.map((pl) => {
                         const pct = pl.count > 0 ? Math.max(10, Math.round((pl.count / maxPlanoCount) * 100)) : 3
                         return (
@@ -631,7 +673,7 @@ export function ObservatoryApp({
                               <span className="font-medium text-slate-700">{pl.id}</span>
                               <span className="font-bold text-[#356b4f]">{pl.count}</span>
                             </div>
-                            <div className="mt-1 h-2.5 w-full overflow-hidden rounded-full bg-slate-100">
+                            <div className="mt-1 h-2 w-full overflow-hidden rounded-full bg-slate-100">
                               <div
                                 style={{ width: `${pct}%` }}
                                 className={`h-full rounded-full transition-all ${pl.count > 0 ? 'bg-[#56816a]' : 'bg-slate-200'}`}
