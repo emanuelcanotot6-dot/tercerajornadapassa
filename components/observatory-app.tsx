@@ -1,6 +1,6 @@
 'use client'
 
-import { type FormEvent, useMemo, useState } from 'react'
+import { type FormEvent, useEffect, useMemo, useState } from 'react'
 import useSWR from 'swr'
 import {
   Activity, AlertCircle, ArrowRight, BookOpen, CalendarDays, CheckCircle2, ClipboardList,
@@ -8,6 +8,8 @@ import {
   MessageSquareQuote, MessageSquareText, Plus, Search, ShieldCheck, Users, X,
 } from 'lucide-react'
 import {
+  analyzeImageFromUrl,
+  type AutoScanResult,
   cleanDescriptionText,
   type DetectedHotspot,
   extractAutoScan,
@@ -171,6 +173,10 @@ export function ObservatoryApp({
   const [heatmapPlano, setHeatmapPlano] = useState(PLANOS_ESCUELA[0].id)
   const [heatmapCategory, setHeatmapCategory] = useState<'ALL' | DetectedHotspot['category']>('ALL')
 
+  // Cache de escaneos retroactivos para mapas subidos antes de activar el escáner
+  const [retroScans, setRetroScans] = useState<Record<string, AutoScanResult>>({})
+  const [scanningRetro, setScanningRetro] = useState(false)
+
   const [propTitulo, setPropTitulo] = useState('')
   const [propSituacion, setPropSituacion] = useState('')
   const [propAccion, setPropAccion] = useState('')
@@ -178,6 +184,36 @@ export function ObservatoryApp({
   const [propPrioridad, setPropPrioridad] = useState('ALTA')
   const [savingProp, setSavingProp] = useState(false)
   const [propMsg, setPropMsg] = useState('')
+
+  // Escanear automáticamente mapas antiguos que no traían [AUTO_SCAN:...] en Sheets
+  useEffect(() => {
+    if (!maps || maps.length === 0) return
+    const sinScan = maps.filter((m) => !extractAutoScan(m.DESCRIPCION) && !retroScans[m.ID_MAPA])
+    if (sinScan.length === 0) return
+
+    let cancelled = false
+    setScanningRetro(true)
+
+    Promise.all(
+      sinScan.map(async (m) => {
+        const url = `/api/observatory?action=mapImage&idMapa=${encodeURIComponent(m.ID_MAPA)}`
+        const res = await analyzeImageFromUrl(url)
+        return [m.ID_MAPA, res] as const
+      })
+    ).then((results) => {
+      if (cancelled) return
+      setRetroScans((prev) => {
+        const next = { ...prev }
+        results.forEach(([id, scan]) => {
+          next[id] = scan
+        })
+        return next
+      })
+      setScanningRetro(false)
+    })
+
+    return () => { cancelled = true }
+  }, [maps, retroScans])
 
   const visibleMaps = useMemo(() => {
     return (maps ?? []).filter((item) => {
@@ -210,7 +246,7 @@ export function ObservatoryApp({
   const resumenSimbolos = useMemo(() => {
     const totals: Record<string, number> = {}
     mapsPorFiltroCurso.forEach((m) => {
-      const scan = extractAutoScan(m.DESCRIPCION)
+      const scan = extractAutoScan(m.DESCRIPCION) || retroScans[m.ID_MAPA]
       if (scan?.counts) {
         Object.entries(scan.counts).forEach(([k, val]) => {
           totals[k] = (totals[k] || 0) + Number(val || 0)
@@ -225,14 +261,14 @@ export function ObservatoryApp({
     return relevantIcons
       .map((ic) => ({ ...ic, count: totals[ic.id] || 0 }))
       .sort((a, b) => b.count - a.count)
-  }, [mapsPorFiltroCurso])
+  }, [mapsPorFiltroCurso, retroScans])
 
   const activePlanHotspots = useMemo(() => {
     const spots: DetectedHotspot[] = []
     mapsPorFiltroCurso
       .filter((m) => (m.SECTOR_PLANO || m.TITULO || '').toLowerCase() === heatmapPlano.toLowerCase())
       .forEach((m) => {
-        const scan = extractAutoScan(m.DESCRIPCION)
+        const scan = extractAutoScan(m.DESCRIPCION) || retroScans[m.ID_MAPA]
         if (scan?.hotspots) {
           scan.hotspots.forEach((h) => {
             if (heatmapCategory === 'ALL' || h.category === heatmapCategory) {
@@ -242,7 +278,7 @@ export function ObservatoryApp({
         }
       })
     return spots
-  }, [mapsPorFiltroCurso, heatmapPlano, heatmapCategory])
+  }, [mapsPorFiltroCurso, heatmapPlano, heatmapCategory, retroScans])
 
   const resumenPorPlano = useMemo(() => {
     return PLANOS_ESCUELA.map((pl) => {
@@ -460,7 +496,11 @@ export function ObservatoryApp({
                 <div>
                   <p className="text-[11px] font-semibold uppercase tracking-[0.15em] text-[#56816a]">E.E.S.T. N.º 6 · Detección Automática sobre Planos</p>
                   <h1 className="mt-2 text-[26px] font-semibold tracking-tight">Análisis institucional</h1>
-                  <p className="mt-1.5 text-sm text-slate-500">Mapas de calor generados automáticamente a partir de los símbolos detectados en las entregas.</p>
+                  <p className="mt-1.5 text-sm text-slate-500">
+                    {scanningRetro
+                      ? 'Analizando imágenes cargadas...'
+                      : 'Mapas de calor generados automáticamente a partir de los símbolos detectados en las entregas.'}
+                  </p>
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="text-xs font-medium text-slate-500">Curso:</span>
@@ -472,6 +512,7 @@ export function ObservatoryApp({
               </div>
 
               <div className="grid gap-5 xl:grid-cols-[1.45fr_1fr]">
+                {/* Mapa de calor real */}
                 <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
                   <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-4">
                     <div className="flex items-center gap-2">
@@ -528,7 +569,7 @@ export function ObservatoryApp({
                   </div>
 
                   <div className="relative mt-4 overflow-hidden rounded-xl border border-slate-200 bg-white">
-                    <img src={activePlanoObj.img} alt={activePlanoObj.id} className="w-full object-contain" />
+                    <img src={encodeURI(activePlanoObj.img)} alt={activePlanoObj.id} className="w-full object-contain" />
                     {activePlanHotspots.map((spot, idx) => {
                       const size = 65 + spot.weight * 14
                       return (
