@@ -44,11 +44,11 @@ type Props = {
 }
 
 const SECTORES_PLANO = [
-  { id: 'Teoría - Planta baja', titulo: 'Teoría', subtitulo: 'Planta baja', img: '/planos/teoria-pb.jpg' },
-  { id: 'Teoría - Planta alta', titulo: 'Teoría', subtitulo: 'Planta alta', img: '/planos/teoria-pa.jpg' },
-  { id: 'Talleres - Planta baja', titulo: 'Talleres', subtitulo: 'Planta baja', img: '/planos/talleres-pb.jpg' },
-  { id: 'Talleres - Planta alta', titulo: 'Talleres', subtitulo: 'Planta alta', img: '/planos/talleres-pa.jpg' },
-  { id: 'Patios - Espacios comunes', titulo: 'Patios', subtitulo: 'Espacios comunes', img: '/planos/patios.jpg' },
+  { id: 'Teoría - Planta baja', titulo: 'Teoría', subtitulo: 'Planta baja', img: '/planos/Teoria Planta Baja1.png' },
+  { id: 'Teoría - Planta alta', titulo: 'Teoría', subtitulo: 'Planta alta', img: '/planos/Teoria Planta alta-1.png' },
+  { id: 'Talleres - Planta baja', titulo: 'Talleres', subtitulo: 'Planta baja', img: '/planos/Taller planta baja.png' },
+  { id: 'Talleres - Planta alta', titulo: 'Talleres', subtitulo: 'Planta alta', img: '/planos/Taller planta Alta.png' },
+  { id: 'Patios - Espacios comunes', titulo: 'Patios', subtitulo: 'Espacios comunes', img: '/planos/Taller Patios.png' },
 ]
 
 export const ICONOS_CONVIVENCIA = [
@@ -88,11 +88,6 @@ const PREGUNTAS_ANALISIS = [
   { key: 'p13', text: '¿Qué espacios no aparecen en los mapas? ¿Qué lugares casi nadie mencionó? ¿Qué podría significar esa ausencia?' },
 ]
 
-/**
- * Analizador visual automático de planos:
- * Detecta las marcas de color colocadas sobre los planos blanco y negro
- * y extrae sus coordenadas (x, y) y categorías para el consolidado directivo.
- */
 async function analyzeMapImage(file: File): Promise<AutoScanResult> {
   return new Promise((resolve) => {
     const img = document.createElement('img')
@@ -153,7 +148,6 @@ async function analyzeMapImage(file: File): Promise<AutoScanResult> {
                 const min = Math.min(R, G, B)
                 const diff = max - min
 
-                // Ignorar blanco, negro y grises del plano arquitectónico base
                 if (diff < 38 || max < 45) continue
 
                 if (G > R + 25 && G > B + 20) {
@@ -174,7 +168,6 @@ async function analyzeMapImage(file: File): Promise<AutoScanResult> {
             entries.sort((a, b) => b[1] - a[1])
             const [topCat, topScore] = entries[0]
 
-            // Si hay suficiente concentración de píxeles de color en esta celda, es un símbolo colocado
             if (topScore >= 14) {
               hotspots.push({
                 x: Math.round(((c + 0.5) / cols) * 100),
@@ -888,7 +881,6 @@ export function StudentPortal({ courses, student, loading = false, error, onEnte
         )}
       </div>
 
-      {/* Modal de vista ampliada con referencia de símbolos al costado */}
       {zoomMapUrl && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 p-4" onClick={() => setZoomMapUrl(null)}>
           <button className="absolute right-5 top-5 rounded-full bg-white/15 p-2 text-white hover:bg-white/25" aria-label="Cerrar"><X size={20} /></button>
