@@ -52,11 +52,11 @@ const SECTORES_PLANO = [
 ]
 
 export const ICONOS_CONVIVENCIA = [
-  { id: 'espacio_cuidado', emoji: '🟢', label: 'Espacio cuidado', category: 'Características de los espacios', desc: 'Lugar que percibimos como cuidado, agradable o que favorece el bienestar.' },
-  { id: 'espacio_transicion', emoji: '🟡', label: 'Espacio en transición', category: 'Características de los espacios', desc: 'Lugar que presenta cambios, situaciones variables o que puede mejorar.' },
-  { id: 'espacio_riesgo', emoji: '🔴', label: 'Espacio de riesgo o poco cuidado', category: 'Características de los espacios', desc: 'Lugar que presenta situaciones que generan malestar, riesgo o falta de cuidado.' },
+  { id: 'espacio_cuidado', emoji: '🟢', label: 'Espacio cuidado / Encuentro', category: 'Características de los espacios', desc: 'Lugar percibido como cuidado, agradable o que favorece el bienestar.' },
+  { id: 'espacio_transicion', emoji: '🟡', label: 'Espacio en transición / Atención', category: 'Características de los espacios', desc: 'Lugar que presenta cambios, situaciones variables o requiere atención.' },
+  { id: 'espacio_riesgo', emoji: '🔴', label: 'Espacio de riesgo / Tensión', category: 'Características de los espacios', desc: 'Lugar con situaciones que generan malestar, conflicto o falta de cuidado.' },
   { id: 'lugar_encuentro', emoji: '🤝', label: 'Lugar de encuentro', category: 'Características de los espacios', desc: 'Espacio donde las personas suelen encontrarse, compartir o permanecer juntas.' },
-  { id: 'espacio_dialogo', emoji: '💬', label: 'Espacio de diálogo', category: 'Características de los espacios', desc: 'Lugar donde se producen conversaciones, intercambios o posibilidades de diálogo.' },
+  { id: 'espacio_dialogo', emoji: '💬', label: 'Espacio de diálogo / Digital', category: 'Características de los espacios', desc: 'Lugar donde se producen conversaciones, intercambios o territorio virtual.' },
   { id: 'requiere_atencion', emoji: '⚠️', label: 'Situación que requiere atención', category: 'Características de los espacios', desc: 'Situación o espacio que consideramos necesario observar o abordar.' },
   { id: 'presencia_adulta', emoji: '👀', label: 'Presencia frecuente de personas adultas', category: 'Características de los espacios', desc: 'Lugar donde habitualmente hay docentes, preceptores o equipo de conducción.' },
   { id: 'territorio_digital', emoji: '📱', label: 'Territorio digital', category: 'Características de los espacios', desc: 'Espacio virtual relacionado con la convivencia: WhatsApp, redes sociales, plataformas.' },
@@ -88,28 +88,27 @@ const PREGUNTAS_ANALISIS = [
   { key: 'p13', text: '¿Qué espacios no aparecen en los mapas? ¿Qué lugares casi nadie mencionó? ¿Qué podría significar esa ausencia?' },
 ]
 
-async function analyzeMapImage(file: File): Promise<AutoScanResult> {
+export async function analyzeImageFromUrl(imageSrc: string): Promise<AutoScanResult> {
   return new Promise((resolve) => {
     const img = document.createElement('img')
-    const objectUrl = URL.createObjectURL(file)
+    img.crossOrigin = 'anonymous'
     img.onload = () => {
       try {
-        const w = 320
-        const h = Math.max(180, Math.round((img.height / img.width) * w))
+        const w = 640
+        const h = Math.max(360, Math.round((img.height / img.width) * w))
         const canvas = document.createElement('canvas')
         canvas.width = w
         canvas.height = h
         const ctx = canvas.getContext('2d')
         if (!ctx) {
-          URL.revokeObjectURL(objectUrl)
           resolve({ counts: {}, hotspots: [] })
           return
         }
         ctx.drawImage(img, 0, 0, w, h)
         const { data } = ctx.getImageData(0, 0, w, h)
 
-        const cols = 10
-        const rows = 6
+        const cols = 12
+        const rows = 8
         const cellW = w / cols
         const cellH = h / rows
 
@@ -148,17 +147,18 @@ async function analyzeMapImage(file: File): Promise<AutoScanResult> {
                 const min = Math.min(R, G, B)
                 const diff = max - min
 
-                if (diff < 38 || max < 45) continue
+                // Ignorar blanco, negro y grises del plano base (umbral suave de saturación)
+                if (diff < 22 || max < 35) continue
 
-                if (G > R + 25 && G > B + 20) {
+                if (G >= R + 12 && G >= B + 10) {
                   cellScores.cuidado++
-                } else if (R > 170 && G > 130 && B < 110) {
+                } else if (R > 145 && G > 105 && B < 130 && R >= G - 10) {
                   cellScores.transicion++
-                } else if (R > G + 45 && R > B + 45) {
+                } else if (R >= G + 25 && R >= B + 25) {
                   cellScores.riesgo++
-                } else if (B > R + 30 && B > G + 15) {
+                } else if (B >= R + 16 && B >= G + 8) {
                   cellScores.dialogo++
-                } else if (R > 120 && B > 120 && G < R - 20) {
+                } else if (R > 100 && B > 95 && G < R - 10) {
                   cellScores.produccion++
                 }
               }
@@ -168,12 +168,13 @@ async function analyzeMapImage(file: File): Promise<AutoScanResult> {
             entries.sort((a, b) => b[1] - a[1])
             const [topCat, topScore] = entries[0]
 
-            if (topScore >= 14) {
+            // Umbral sensible para detectar emojis/íconos pequeños sobre el plano
+            if (topScore >= 6) {
               hotspots.push({
                 x: Math.round(((c + 0.5) / cols) * 100),
                 y: Math.round(((r + 0.5) / rows) * 100),
                 category: topCat,
-                weight: Math.min(5, Math.ceil(topScore / 25)),
+                weight: Math.min(5, Math.max(1, Math.ceil(topScore / 18))),
               })
 
               if (topCat === 'cuidado') counts.espacio_cuidado++
@@ -185,19 +186,21 @@ async function analyzeMapImage(file: File): Promise<AutoScanResult> {
           }
         }
 
-        URL.revokeObjectURL(objectUrl)
         resolve({ counts, hotspots })
       } catch {
-        URL.revokeObjectURL(objectUrl)
         resolve({ counts: {}, hotspots: [] })
       }
     }
-    img.onerror = () => {
-      URL.revokeObjectURL(objectUrl)
-      resolve({ counts: {}, hotspots: [] })
-    }
-    img.src = objectUrl
+    img.onerror = () => resolve({ counts: {}, hotspots: [] })
+    img.src = imageSrc
   })
+}
+
+async function analyzeMapImage(file: File): Promise<AutoScanResult> {
+  const objectUrl = URL.createObjectURL(file)
+  const result = await analyzeImageFromUrl(objectUrl)
+  URL.revokeObjectURL(objectUrl)
+  return result
 }
 
 export function cleanDescriptionText(raw: string): string {
@@ -563,7 +566,7 @@ export function StudentPortal({ courses, student, loading = false, error, onEnte
                         }`}
                       >
                         <div className="aspect-[16/9] w-full overflow-hidden border-b border-slate-100 bg-white">
-                          <img src={sec.img} alt={sec.id} className="h-full w-full object-cover" />
+                          <img src={encodeURI(sec.img)} alt={sec.id} className="h-full w-full object-cover" />
                         </div>
                         <div className="p-3">
                           <p className="text-xs font-bold text-slate-900">{sec.titulo}</p>
@@ -626,10 +629,8 @@ export function StudentPortal({ courses, student, loading = false, error, onEnte
                   </form>
                 </section>
 
-                {/* Leyenda completa de símbolos para interpretar los mapas */}
                 <LeyendaSimbolos compact={false} />
 
-                {/* Galería exclusiva del curso actual */}
                 <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
