@@ -91,7 +91,14 @@ function safeUser(user: Record<string, unknown>) {
 
 function isSameOrigin(request: NextRequest) {
   const origin = request.headers.get('origin')
-  return !origin || origin === new URL(request.url).origin
+  if (!origin) return true
+  try {
+    const originHost = new URL(origin).host
+    const forwardedHost = request.headers.get('x-forwarded-host') || request.headers.get('host') || new URL(request.url).host
+    return originHost === forwardedHost || originHost.endsWith('.netlify.app')
+  } catch {
+    return false
+  }
 }
 
 function signStudent(identity: Omit<StudentIdentity, 'id' | 'expiresAt'>) {
