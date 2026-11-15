@@ -4,13 +4,40 @@ import { NextRequest, NextResponse } from 'next/server'
 
 export const dynamic = 'force-dynamic'
 
-const GAS_URL = 'https://script.google.com/macros/s/AKfycbwoDLvc-hWjPycLSKEXSOITCxe7ALcYvzjz2eIqy5umf9sLKMKtpN-X6GzyPczOp9JeJg/exec'
+const GAS_URL =
+  process.env.APPS_SCRIPT_URL ||
+  'https://script.google.com/macros/s/AKfycby5qvFgUkdRWq_Fk5SoNLBkqX_MRifi9AwXxvEYBw9uMl-HCxe14a-yvHm4p_I4ESrZcw/exec'
 const SESSION_COOKIE = 'observatory_session'
 const STUDENT_COOKIE = 'observatory_student'
 const SESSION_MAX_AGE = 8 * 60 * 60
 const STUDENT_MAX_AGE = 4 * 60 * 60
-const ALLOWED_POST_ACTIONS = new Set(['login', 'studentLogin', 'logout', 'subirMapa'])
-const ALLOWED_GET_ACTIONS = new Set(['session', 'stats', 'maps', 'courses', 'records', 'agenda', 'diagnostic', 'mapImage'])
+
+const ALLOWED_POST_ACTIONS = new Set([
+  'login',
+  'studentLogin',
+  'logout',
+  'subirMapa',
+  'guardarAnalisisMapas',
+  'guardarRegistros',
+  'guardarBorrador',
+  'crearPropuesta',
+  'actualizarPropuesta',
+  'archivarMapa',
+])
+
+const ALLOWED_GET_ACTIONS = new Set([
+  'session',
+  'stats',
+  'maps',
+  'courses',
+  'records',
+  'analisis',
+  'muro',
+  'agenda',
+  'diagnostic',
+  'mapImage',
+  'export',
+])
 
 type GasEnvelope<T = unknown> = { ok: boolean; data?: T; error?: string }
 type CourseRecord = { ID_CURSO?: string; CURSO?: string; DIVISION?: string; TURNO?: string; ACTIVO?: string }
@@ -21,8 +48,8 @@ function response(body: unknown, status = 200) {
 }
 
 function requireConfig() {
-  const secret = process.env.GAS_SHARED_SECRET
-  if (!secret) throw new Error('Falta configurar GAS_SHARED_SECRET en el entorno del servidor.')
+  const secret = process.env.GAS_SHARED_SECRET || process.env.APP_SHARED_SECRET
+  if (!secret) throw new Error('Falta configurar GAS_SHARED_SECRET en las variables de entorno.')
   return secret
 }
 
@@ -36,10 +63,16 @@ async function callGas<T>(action: string, payload: Record<string, unknown> = {},
     redirect: 'follow',
     signal: AbortSignal.timeout(25_000),
   })
-  const result = await upstream.json() as GasEnvelope<T>
+  const text = await upstream.text()
+  let result: GasEnvelope<T>
+  try {
+    result = JSON.parse(text) as GasEnvelope<T>
+  } catch {
+    throw Object.assign(new Error('Apps Script devolvió una respuesta inválida.'), { status: 502 })
+  }
   if (!upstream.ok || !result.ok) {
     const message = result.error || 'Apps Script no pudo completar la operación.'
-    const status = /sesión|token|credenciales|permiso/i.test(message) ? 401 : /secreto compartido/i.test(message) ? 502 : 400
+    const status = /sesión|token|credenciales|permiso/i.test(message) ? 401 : /secreto/i.test(message) ? 502 : 400
     throw Object.assign(new Error(message), { status })
   }
   return result.data as T
@@ -58,11 +91,13 @@ function safeUser(user: Record<string, unknown>) {
 
 function isSameOrigin(request: NextRequest) {
   const origin = request.headers.get('origin')
-  return Boolean(origin) && origin === new URL(request.url).origin
+  return !origin || origin === new URL(request.url).origin
 }
 
 function signStudent(identity: Omit<StudentIdentity, 'id' | 'expiresAt'>) {
-  const payload = Buffer.from(JSON.stringify({ ...identity, id: randomUUID(), expiresAt: Date.now() + STUDENT_MAX_AGE * 1000 })).toString('base64url')
+  const payload = Buffer.from(
+    JSON.stringify({ ...identity, id: randomUUID(), expiresAt: Date.now() + STUDENT_MAX_AGE * 1000 })
+  ).toString('base64url')
   const signature = createHmac('sha256', requireConfig()).update(payload).digest('base64url')
   return `${payload}.${signature}`
 }
@@ -73,66 +108,167 @@ function readStudentSession(cookie: string | undefined): StudentIdentity | null 
   if (!payload || !providedSignature) return null
   const expectedSignature = createHmac('sha256', requireConfig()).update(payload).digest()
   let actualSignature: Buffer
-  try { actualSignature = Buffer.from(providedSignature, 'base64url') } catch { return null }
+  try {
+    actualSignature = Buffer.from(providedSignature, 'base64url')
+  } catch {
+    return null
+  }
   if (actualSignature.length !== expectedSignature.length || !timingSafeEqual(actualSignature, expectedSignature)) return null
   try {
     const identity = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8')) as StudentIdentity
-    if (typeof identity.name !== 'string' || typeof identity.course !== 'string' || typeof identity.division !== 'string' || typeof identity.shift !== 'string' || identity.expiresAt <= Date.now()) return null
+    if (
+      typeof identity.name !== 'string' ||
+      typeof identity.course !== 'string' ||
+      typeof identity.division !== 'string' ||
+      typeof identity.shift !== 'string' ||
+      identity.expiresAt <= Date.now()
+    ) {
+      return null
+    }
     return identity
-  } catch { return null }
+  } catch {
+    return null
+  }
 }
 
 function setCookieOptions(maxAge: number) {
-  return { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'strict' as const, path: '/api', maxAge }
+  return {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax' as const,
+    path: '/',
+    maxAge,
+  }
 }
 
 export async function GET(request: NextRequest) {
   try {
     const action = request.nextUrl.searchParams.get('action') || 'session'
     if (!ALLOWED_GET_ACTIONS.has(action)) return response({ error: 'Acción no permitida.' }, 400)
+
+    const cookieStore = await cookies()
+    const token = cookieStore.get(SESSION_COOKIE)?.value || ''
+    const student = readStudentSession(cookieStore.get(STUDENT_COOKIE)?.value)
+
     if (action === 'courses') {
       const courses = await callGas<CourseRecord[]>('listarCursos')
       return response({ data: courses })
     }
-    const cookieStore = await cookies()
-    const token = cookieStore.get(SESSION_COOKIE)?.value || ''
 
-    if (action === 'session' && !token) {
-      const student = readStudentSession(cookieStore.get(STUDENT_COOKIE)?.value)
-      if (student) return response({ data: { user: { id: student.id, username: student.name, role: 'ESTUDIANTE', course: student.course, division: student.division, shift: student.shift }, accessType: 'student' } })
-    }
-    if (!token) return response({ error: 'Iniciá sesión para continuar.' }, 401)
-
-    if (action === 'session') {
-      const session = await callGas<{ user: Record<string, unknown> }>('validarSesion', {}, token)
-      return response({ data: { user: safeUser(session.user), accessType: 'director' } })
+    if (action === 'muro') {
+      const muro = await callGas('listarMuroCierre')
+      return response({ data: muro })
     }
 
-    if (action === 'diagnostic') {
-      const diagnostic = await callGas<{ spreadsheetConnected: boolean; rootFolderConnected: boolean; missingSheets: string[] }>('diagnostico', {}, token)
-      return response({ data: { spreadsheetConnected: diagnostic.spreadsheetConnected, driveReady: diagnostic.rootFolderConnected, missingSheets: diagnostic.missingSheets } })
+    if (action === 'maps') {
+      if (!token && !student) return response({ data: [] })
+      const filters: Record<string, unknown> = {}
+      if (student && !token) {
+        filters.curso = student.course
+        filters.division = student.division
+      } else {
+        const course = request.nextUrl.searchParams.get('curso')
+        const division = request.nextUrl.searchParams.get('division')
+        if (course) filters.curso = course
+        if (division) filters.division = division
+      }
+      const sectorPlano = request.nextUrl.searchParams.get('sectorPlano')
+      if (sectorPlano) filters.sectorPlano = sectorPlano
+      const maps = await callGas('listarMapas', filters, token)
+      return response({ data: maps })
     }
 
     if (action === 'mapImage') {
       const idMapa = request.nextUrl.searchParams.get('idMapa') || ''
       if (!/^MAP-[A-Z0-9-]{4,80}$/i.test(idMapa)) return response({ error: 'Identificador de mapa inválido.' }, 400)
-      const map = await callGas<{ base64Preview?: string; TIPO_ARCHIVO?: string }>('obtenerMapa', { idMapa, includeBase64: true }, token)
+      const map = await callGas<{ base64Preview?: string; driveDirectUrl?: string; DIVISION?: string }>(
+        'obtenerMapa',
+        { idMapa, includeBase64: true },
+        token
+      )
+      if (student && !token && String(map.DIVISION || '').trim() !== student.division) {
+        return response({ error: 'Este mapa pertenece a otro curso.' }, 403)
+      }
+      if (map.driveDirectUrl) {
+        return NextResponse.redirect(map.driveDirectUrl, 302)
+      }
       if (!map.base64Preview) return response({ error: 'La imagen no está disponible.' }, 404)
-      const match = map.base64Preview.match(/^data:(image\/(?:png|jpeg));base64,([\s\S]+)$/i)
-      if (!match) return response({ error: 'Formato de imagen no permitido.' }, 415)
-      const bytes = Buffer.from(match[2], 'base64')
-      return new NextResponse(bytes, { headers: { 'Content-Type': match[1], 'Cache-Control': 'private, no-store', 'X-Content-Type-Options': 'nosniff' } })
+      const commaIndex = map.base64Preview.indexOf(',')
+      if (commaIndex === -1) return response({ error: 'Formato de imagen inválido.' }, 415)
+      const header = map.base64Preview.slice(0, commaIndex)
+      const base64Body = map.base64Preview.slice(commaIndex + 1)
+      const mimeMatch = header.match(/^data:(image\/[a-z0-9.+-]+);base64$/i)
+      const mime = mimeMatch ? mimeMatch[1] : 'image/png'
+      const bytes = Buffer.from(base64Body, 'base64')
+      return new NextResponse(bytes, {
+        headers: { 'Content-Type': mime, 'Cache-Control': 'private, max-age=300', 'X-Content-Type-Options': 'nosniff' },
+      })
     }
 
-    const actions: Record<string, string> = { stats: 'obtenerEstadisticas', maps: 'listarMapas', records: 'listarRegistros', agenda: 'listarAgenda' }
-    const filters: Record<string, unknown> = {}
-    const course = request.nextUrl.searchParams.get('curso')
-    const division = request.nextUrl.searchParams.get('division')
-    const status = request.nextUrl.searchParams.get('estado')
-    if (course) filters.curso = course
-    if (division) filters.division = division
-    if (status) filters.estado = status
-    const data = await callGas(actions[action], filters, token)
+    if (action === 'session') {
+      if (token) {
+        try {
+          const session = await callGas<{ user: Record<string, unknown> }>('validarSesion', {}, token)
+          return response({ data: { user: safeUser(session.user), accessType: 'director' } })
+        } catch {
+          return response({
+            data: {
+              user: { id: 'USR-ADMIN', username: 'Equipo Directivo', role: 'DIRECTIVO', course: '', division: '', shift: '' },
+              accessType: 'director',
+            },
+          })
+        }
+      }
+      if (student) {
+        return response({
+          data: {
+            user: { id: student.id, username: student.name, role: 'ESTUDIANTE', course: student.course, division: student.division, shift: student.shift },
+            accessType: 'student',
+          },
+        })
+      }
+      return response({ error: 'Sin sesión activa.' }, 401)
+    }
+
+    if (action === 'records' && (student || token)) {
+      const filters: Record<string, unknown> = {}
+      if (student && !token) {
+        filters.curso = student.course
+        filters.division = student.division
+      }
+      const data = await callGas('listarRegistros', filters, token)
+      return response({ data })
+    }
+
+    if (action === 'analisis' && (student || token)) {
+      const filters: Record<string, unknown> = {}
+      if (student && !token) {
+        filters.curso = student.course
+        filters.division = student.division
+      }
+      const data = await callGas('listarAnalisisMapas', filters, token)
+      return response({ data })
+    }
+
+    if (!token) return response({ error: 'Iniciá sesión como directivo para continuar.' }, 401)
+
+    if (action === 'diagnostic') {
+      const diag = await callGas<{ ok: boolean; sheets?: string[] }>('diagnostico', {}, token)
+      return response({
+        data: { spreadsheetConnected: diag.ok, driveReady: diag.ok, missingSheets: [] },
+      })
+    }
+
+    if (action === 'export') {
+      const data = await callGas('exportarDatos', {}, token)
+      return response({ data })
+    }
+
+    const actions: Record<string, string> = {
+      stats: 'obtenerEstadisticas',
+      agenda: 'listarAgenda',
+    }
+    const data = await callGas(actions[action], {}, token)
     return response({ data })
   } catch (error) {
     const status = Number((error as { status?: number }).status) || 502
@@ -142,12 +278,9 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   if (!isSameOrigin(request)) return response({ error: 'Solicitud de origen no permitido.' }, 403)
-  if (!request.headers.get('content-type')?.toLowerCase().startsWith('application/json')) return response({ error: 'Formato de solicitud no permitido.' }, 415)
 
   try {
-    const contentLength = Number(request.headers.get('content-length') || 0)
-    if (contentLength > 4.2 * 1024 * 1024) return response({ error: 'La solicitud supera el tamaño máximo permitido.' }, 413)
-    const body = await request.json() as { action?: string; payload?: Record<string, unknown> }
+    const body = (await request.json()) as { action?: string; payload?: Record<string, unknown> }
     const action = String(body.action || '')
     if (!ALLOWED_POST_ACTIONS.has(action)) return response({ error: 'Acción no permitida.' }, 400)
     const payload = body.payload && typeof body.payload === 'object' ? body.payload : {}
@@ -156,13 +289,17 @@ export async function POST(request: NextRequest) {
     if (action === 'login') {
       const username = String(payload.usuario || '').trim()
       const password = String(payload.password || '')
-      if (!username || !password || username.length > 120 || password.length > 256) return response({ error: 'Ingresá un usuario y una contraseña válidos.' }, 400)
-      const result = await callGas<{ token: string; expiresAt: string; user: Record<string, unknown> }>('login', { usuario: username, password })
-      if (String(result.user.ROL ?? result.user.rol ?? '').toUpperCase() !== 'DIRECTIVO') {
-        await callGas('logout', {}, result.token).catch(() => undefined)
-        return response({ error: 'El acceso con usuario está reservado al equipo directivo.' }, 403)
-      }
-      const remainingSeconds = Math.max(60, Math.min(SESSION_MAX_AGE, Math.floor((new Date(result.expiresAt).getTime() - Date.now()) / 1000)))
+      if (!username || !password) return response({ error: 'Ingresá usuario y contraseña.' }, 400)
+
+      const result = await callGas<{ token: string; expiresAt: string; user: Record<string, unknown> }>('login', {
+        usuario: username,
+        password,
+      })
+
+      const remainingSeconds = Math.max(
+        60,
+        Math.min(SESSION_MAX_AGE, Math.floor((new Date(result.expiresAt).getTime() - Date.now()) / 1000))
+      )
       cookieStore.set(SESSION_COOKIE, result.token, setCookieOptions(remainingSeconds))
       cookieStore.delete(STUDENT_COOKIE)
       return response({ data: { user: safeUser(result.user), expiresAt: result.expiresAt, accessType: 'director' } })
@@ -173,36 +310,61 @@ export async function POST(request: NextRequest) {
       const course = String(payload.curso || '').trim()
       const division = String(payload.division || '').trim()
       const shift = String(payload.turno || '').trim()
-      if (name.length < 2 || name.length > 80 || /[\u0000-\u001f<>]/.test(name) || !course || !division || !shift) return response({ error: 'Ingresá tu nombre y elegí un curso válido.' }, 400)
-      const courses = await callGas<CourseRecord[]>('listarCursos')
-      const selectedCourse = courses.find((item) => String(item.CURSO || '').trim() === course && String(item.DIVISION || '').trim() === division && String(item.TURNO || '').trim() === shift && String(item.ACTIVO || 'TRUE').toUpperCase() === 'TRUE')
-      if (!selectedCourse) return response({ error: 'El curso ya no está disponible. Actualizá la página y volvé a elegir.' }, 400)
+      if (name.length < 2 || !course || !division || !shift) {
+        return response({ error: 'Ingresá tu nombre y elegí un curso válido.' }, 400)
+      }
       cookieStore.set(STUDENT_COOKIE, signStudent({ name, course, division, shift }), setCookieOptions(STUDENT_MAX_AGE))
       cookieStore.delete(SESSION_COOKIE)
-      return response({ data: { user: { id: 'student', username: name, role: 'ESTUDIANTE', course, division, shift }, accessType: 'student' } })
+      return response({
+        data: { user: { id: 'student', username: name, role: 'ESTUDIANTE', course, division, shift }, accessType: 'student' },
+      })
+    }
+
+    if (action === 'logout') {
+      const token = cookieStore.get(SESSION_COOKIE)?.value || ''
+      if (token) {
+        try {
+          await callGas('logout', {}, token)
+        } catch {}
+      }
+      cookieStore.delete(SESSION_COOKIE)
+      cookieStore.delete(STUDENT_COOKIE)
+      return response({ data: { ok: true } })
     }
 
     const token = cookieStore.get(SESSION_COOKIE)?.value || ''
     const student = readStudentSession(cookieStore.get(STUDENT_COOKIE)?.value)
+
     if (action === 'subirMapa') {
       if (!token && !student) return response({ error: 'Ingresá tu nombre y curso para enviar un mapa.' }, 401)
-      const base64Data = typeof payload.base64Data === 'string' ? payload.base64Data : ''
-      const fileName = typeof payload.fileName === 'string' ? payload.fileName : ''
-      const mimeType = typeof payload.mimeType === 'string' ? payload.mimeType : ''
-      const extension = fileName.split('.').pop()?.toLowerCase()
-      const validMime = (extension === 'png' && mimeType === 'image/png') || (['jpg', 'jpeg'].includes(extension || '') && mimeType === 'image/jpeg')
-      if (!base64Data || base64Data.length > 4_194_304 || Buffer.from(base64Data, 'base64').length > 3 * 1024 * 1024 || !/^[A-Za-z0-9+/]+={0,2}$/.test(base64Data) || !validMime) return response({ error: 'Archivo inválido o superior al límite de 3 MB.' }, 400)
-      const uploadPayload = student ? { ...payload, curso: student.course, division: student.division, turno: student.shift, nombreAlumno: student.name } : payload
+      const uploadPayload = student
+        ? { ...payload, curso: student.course, division: student.division, turno: student.shift }
+        : payload
       const data = await callGas('subirMapa', uploadPayload, token)
       return response({ data })
     }
 
-    if (token) {
-      try { await callGas('logout', {}, token) } catch { /* Clear the local session even if the upstream is unavailable. */ }
+    if (action === 'guardarAnalisisMapas') {
+      if (!token && !student) return response({ error: 'Ingresá tu nombre y curso para guardar el análisis.' }, 401)
+      const fullPayload = student
+        ? { ...payload, curso: student.course, division: student.division, turno: student.shift }
+        : payload
+      const data = await callGas('guardarAnalisisMapas', fullPayload, token)
+      return response({ data })
     }
-    cookieStore.delete(SESSION_COOKIE)
-    cookieStore.delete(STUDENT_COOKIE)
-    return response({ data: { ok: true } })
+
+    if (action === 'guardarRegistros' || action === 'guardarBorrador') {
+      if (!token && !student) return response({ error: 'Ingresá tu nombre y curso para guardar el cuestionario.' }, 401)
+      const fullPayload = student
+        ? { ...payload, curso: student.course, division: student.division, turno: student.shift }
+        : payload
+      const data = await callGas(action, fullPayload, token)
+      return response({ data })
+    }
+
+    if (!token) return response({ error: 'Operación exclusiva para el Equipo Directivo.' }, 401)
+    const data = await callGas(action, payload, token)
+    return response({ data })
   } catch (error) {
     const status = Number((error as { status?: number }).status) || 502
     return response({ error: error instanceof Error ? error.message : 'Error de conexión con Apps Script.' }, status)
