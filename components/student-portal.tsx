@@ -22,15 +22,29 @@ type PuntoCritico = {
   desafiosPersistentes: string
 }
 
+export type ValenceGroup = 'positivo' | 'atencion' | 'riesgo'
+
 export type DetectedHotspot = {
   x: number
   y: number
-  category: 'cuidado' | 'transicion' | 'riesgo' | 'dialogo' | 'produccion'
+  category:
+    | 'espacio_cuidado'
+    | 'cuidado_corazon'
+    | 'iniciativa_proyecto'
+    | 'espacio_transicion'
+    | 'requiere_atencion'
+    | 'lugar_encuentro'
+    | 'espacio_riesgo'
+    | 'exclusion_tension'
+    | 'espacio_dialogo'
+    | 'producciones_grafitis'
+  valence: ValenceGroup
   weight: number
 }
 
 export type AutoScanResult = {
   counts: Record<string, number>
+  valenceTotals: Record<ValenceGroup, number>
   hotspots: DetectedHotspot[]
 }
 
@@ -52,24 +66,31 @@ const SECTORES_PLANO = [
 ]
 
 export const ICONOS_CONVIVENCIA = [
-  { id: 'espacio_cuidado', emoji: '🟢', label: 'Espacio cuidado / Encuentro', category: 'Características de los espacios', desc: 'Lugar percibido como cuidado, agradable o que favorece el bienestar.' },
-  { id: 'espacio_transicion', emoji: '🟡', label: 'Espacio en transición / Atención', category: 'Características de los espacios', desc: 'Lugar que presenta cambios, situaciones variables o requiere atención.' },
-  { id: 'espacio_riesgo', emoji: '🔴', label: 'Espacio de riesgo / Tensión', category: 'Características de los espacios', desc: 'Lugar con situaciones que generan malestar, conflicto o falta de cuidado.' },
-  { id: 'lugar_encuentro', emoji: '🤝', label: 'Lugar de encuentro', category: 'Características de los espacios', desc: 'Espacio donde las personas suelen encontrarse, compartir o permanecer juntas.' },
-  { id: 'espacio_dialogo', emoji: '💬', label: 'Espacio de diálogo / Digital', category: 'Características de los espacios', desc: 'Lugar donde se producen conversaciones, intercambios o territorio virtual.' },
-  { id: 'requiere_atencion', emoji: '⚠️', label: 'Situación que requiere atención', category: 'Características de los espacios', desc: 'Situación o espacio que consideramos necesario observar o abordar.' },
-  { id: 'presencia_adulta', emoji: '👀', label: 'Presencia frecuente de personas adultas', category: 'Características de los espacios', desc: 'Lugar donde habitualmente hay docentes, preceptores o equipo de conducción.' },
-  { id: 'territorio_digital', emoji: '📱', label: 'Territorio digital', category: 'Características de los espacios', desc: 'Espacio virtual relacionado con la convivencia: WhatsApp, redes sociales, plataformas.' },
-  { id: 'producciones_grafitis', emoji: '🎨', label: 'Producciones, grafitis o mensajes', category: 'Características de los espacios', desc: 'Mensajes, dibujos, carteles o grafitis significativos de la vida cotidiana.' },
-  { id: 'exclusion_tension', emoji: '🚫', label: 'Exclusión / Rivalidades / Tensiones', category: 'Relaciones y convivencia', desc: 'Situaciones donde aparecen conflictos, exclusión, rivalidades o malestares.' },
-  { id: 'cuidado', emoji: '❤️', label: 'Cuidado', category: 'Relaciones y convivencia', desc: 'Espacios o situaciones donde se manifiestan prácticas de cuidado.' },
-  { id: 'iniciativa_proyecto', emoji: '🌱', label: 'Iniciativa o proyecto', category: 'Relaciones y convivencia', desc: 'Proyectos, propuestas o iniciativas que favorecen la convivencia o los aprendizajes.' },
-  { id: 'espacio_cambiante', emoji: '🔄', label: 'Cambia según el momento', category: 'Relaciones y convivencia', desc: 'Lugares vividos de manera diferente según el momento del día o quiénes los habitan.' },
-  { id: 'familia', emoji: '🏠', label: 'Participación de la familia', category: 'Otros espacios', desc: 'Vínculo y participación de las familias en la comunidad escolar.' },
-  { id: 'barrio_comunidad', emoji: '🏘️', label: 'Barrio / Comunidad', category: 'Otros espacios', desc: 'Relación con el entorno barrial y comunitario.' },
-  { id: 'club_plaza', emoji: '⚽', label: 'Club, plaza u otros espacios', category: 'Otros espacios', desc: 'Espacios comunitarios, plazas o clubes frecuentes.' },
-  { id: 'circula_territorios', emoji: '↔️', label: 'Conflicto circula entre territorios', category: 'Otros espacios', desc: 'El conflicto continúa entre la escuela, redes, barrio o transporte.' },
-  { id: 'parada_colectivo', emoji: '🚌', label: 'Parada del colectivo', category: 'Otros espacios', desc: 'Entradas, salidas y trayectos en parada del colectivo.' },
+  // POSITIVOS / CUIDADO Y ENCUENTRO
+  { id: 'espacio_cuidado', emoji: '🟢', label: 'Espacio cuidado', valence: 'positivo' as ValenceGroup, category: 'Características de los espacios', desc: 'Lugar que percibimos como cuidado, agradable o que favorece el bienestar.' },
+  { id: 'cuidado_corazon', emoji: '❤️', label: 'Cuidado (Prácticas de cuidado)', valence: 'positivo' as ValenceGroup, category: 'Relaciones y convivencia', desc: 'Espacios o situaciones donde se manifiestan prácticas de cuidado.' },
+  { id: 'lugar_encuentro', emoji: '🤝', label: 'Lugar de encuentro', valence: 'positivo' as ValenceGroup, category: 'Características de los espacios', desc: 'Espacio donde las personas suelen encontrarse, compartir o permanecer juntas.' },
+  { id: 'espacio_dialogo', emoji: '💬', label: 'Espacio de diálogo', valence: 'positivo' as ValenceGroup, category: 'Características de los espacios', desc: 'Lugar donde se producen conversaciones, intercambios o posibilidades de diálogo.' },
+  { id: 'iniciativa_proyecto', emoji: '🌱', label: 'Iniciativa o proyecto', valence: 'positivo' as ValenceGroup, category: 'Relaciones y convivencia', desc: 'Proyectos, propuestas o iniciativas que favorecen la convivencia o los aprendizajes.' },
+  { id: 'presencia_adulta', emoji: '👀', label: 'Presencia frecuente de personas adultas', valence: 'positivo' as ValenceGroup, category: 'Características de los espacios', desc: 'Lugar donde habitualmente hay docentes, preceptores o equipo de conducción.' },
+
+  // TRANSICIÓN / ATENCIÓN / TERRITORIOS
+  { id: 'espacio_transicion', emoji: '🟡', label: 'Espacio en transición', valence: 'atencion' as ValenceGroup, category: 'Características de los espacios', desc: 'Lugar que presenta cambios, situaciones variables o que puede mejorar.' },
+  { id: 'requiere_atencion', emoji: '⚠️', label: 'Situación que requiere atención', valence: 'atencion' as ValenceGroup, category: 'Características de los espacios', desc: 'Situación o espacio que consideramos necesario observar o abordar.' },
+  { id: 'espacio_cambiante', emoji: '🔄', label: 'Cambia según el momento', valence: 'atencion' as ValenceGroup, category: 'Relaciones y convivencia', desc: 'Lugares vividos de manera diferente según el momento del día o quiénes los habitan.' },
+  { id: 'territorio_digital', emoji: '📱', label: 'Territorio digital', valence: 'atencion' as ValenceGroup, category: 'Características de los espacios', desc: 'Espacio virtual relacionado con la convivencia: WhatsApp, redes sociales, plataformas.' },
+  { id: 'producciones_grafitis', emoji: '🎨', label: 'Producciones, grafitis o mensajes', valence: 'atencion' as ValenceGroup, category: 'Características de los espacios', desc: 'Mensajes, dibujos, carteles o grafitis significativos de la vida cotidiana.' },
+
+  // RIESGO / TENSIÓN / CONFLICTO
+  { id: 'espacio_riesgo', emoji: '🔴', label: 'Espacio de riesgo o poco cuidado', valence: 'riesgo' as ValenceGroup, category: 'Características de los espacios', desc: 'Lugar que presenta situaciones que generan malestar, riesgo o falta de cuidado.' },
+  { id: 'exclusion_tension', emoji: '🚫', label: 'Exclusión / Rivalidades / Tensiones', valence: 'riesgo' as ValenceGroup, category: 'Relaciones y convivencia', desc: 'Situaciones donde aparecen conflictos, exclusión, rivalidades o malestares.' },
+
+  // OTROS ESPACIOS
+  { id: 'familia', emoji: '🏠', label: 'Participación de la familia', valence: 'positivo' as ValenceGroup, category: 'Otros espacios', desc: 'Vínculo y participación de las familias en la comunidad escolar.' },
+  { id: 'barrio_comunidad', emoji: '🏘️', label: 'Barrio / Comunidad', valence: 'atencion' as ValenceGroup, category: 'Otros espacios', desc: 'Relación con el entorno barrial y comunitario.' },
+  { id: 'club_plaza', emoji: '⚽', label: 'Club, plaza u otros espacios', valence: 'positivo' as ValenceGroup, category: 'Otros espacios', desc: 'Espacios comunitarios, plazas o clubes frecuentes.' },
+  { id: 'circula_territorios', emoji: '↔️', label: 'Conflicto circula entre territorios', valence: 'riesgo' as ValenceGroup, category: 'Otros espacios', desc: 'El conflicto continúa entre la escuela, redes, barrio o transporte.' },
+  { id: 'parada_colectivo', emoji: '🚌', label: 'Parada del colectivo', valence: 'atencion' as ValenceGroup, category: 'Otros espacios', desc: 'Entradas, salidas y trayectos en parada del colectivo.' },
 ]
 
 const PREGUNTAS_ANALISIS = [
@@ -88,6 +109,13 @@ const PREGUNTAS_ANALISIS = [
   { key: 'p13', text: '¿Qué espacios no aparecen en los mapas? ¿Qué lugares casi nadie mencionó? ¿Qué podría significar esa ausencia?' },
 ]
 
+/**
+ * Analizador visual con diferenciación geométrica y de valencia:
+ * - Distingue ❤️ Cuidado (corazón: ancho arriba, vértice estrecho abajo y escotadura superior)
+ *   de 🔴 Espacio de riesgo (círculo rojo compacto y simétrico) y 🚫 Exclusión (anillo rojo con centro claro).
+ * - Distingue 🟢 Espacio cuidado vs 🌱 Iniciativa/proyecto.
+ * - Distingue 🟡 Espacio en transición vs ⚠️ Atención vs 🤝 Encuentro.
+ */
 export async function analyzeImageFromUrl(imageSrc: string): Promise<AutoScanResult> {
   return new Promise((resolve) => {
     const img = document.createElement('img')
@@ -101,7 +129,7 @@ export async function analyzeImageFromUrl(imageSrc: string): Promise<AutoScanRes
         canvas.height = h
         const ctx = canvas.getContext('2d')
         if (!ctx) {
-          resolve({ counts: {}, hotspots: [] })
+          resolve({ counts: {}, valenceTotals: { positivo: 0, atencion: 0, riesgo: 0 }, hotspots: [] })
           return
         }
         ctx.drawImage(img, 0, 0, w, h)
@@ -114,27 +142,40 @@ export async function analyzeImageFromUrl(imageSrc: string): Promise<AutoScanRes
 
         const counts: Record<string, number> = {
           espacio_cuidado: 0,
-          espacio_transicion: 0,
-          espacio_riesgo: 0,
+          cuidado_corazon: 0,
+          lugar_encuentro: 0,
           espacio_dialogo: 0,
+          iniciativa_proyecto: 0,
+          espacio_transicion: 0,
+          requiere_atencion: 0,
           producciones_grafitis: 0,
+          espacio_riesgo: 0,
+          exclusion_tension: 0,
+        }
+        const valenceTotals: Record<ValenceGroup, number> = {
+          positivo: 0,
+          atencion: 0,
+          riesgo: 0,
         }
         const hotspots: DetectedHotspot[] = []
 
         for (let r = 0; r < rows; r++) {
           for (let c = 0; c < cols; c++) {
-            const cellScores: Record<DetectedHotspot['category'], number> = {
-              cuidado: 0,
-              transicion: 0,
-              riesgo: 0,
-              dialogo: 0,
-              produccion: 0,
-            }
-
             const startX = Math.floor(c * cellW)
             const endX = Math.floor((c + 1) * cellW)
             const startY = Math.floor(r * cellH)
             const endY = Math.floor((r + 1) * cellH)
+
+            let greenCount = 0
+            let yellowCount = 0
+            let redCount = 0
+            let blueCount = 0
+            let purpleCount = 0
+
+            // Coordenadas de píxeles rojos para distinguir ❤️ (corazón) vs 🔴 (círculo) vs 🚫 (anillo)
+            const redPoints: { x: number; y: number }[] = []
+            // Coordenadas de píxeles amarillos/ámbar para distinguir 🟡 vs ⚠️ vs 🤝
+            const yellowPoints: { x: number; y: number }[] = []
 
             for (let y = startY; y < endY; y++) {
               for (let x = startX; x < endX; x++) {
@@ -147,51 +188,133 @@ export async function analyzeImageFromUrl(imageSrc: string): Promise<AutoScanRes
                 const min = Math.min(R, G, B)
                 const diff = max - min
 
-                // Ignorar blanco, negro y grises del plano base (umbral suave de saturación)
-                if (diff < 22 || max < 35) continue
+                if (diff < 24 || max < 35) continue
 
                 if (G >= R + 12 && G >= B + 10) {
-                  cellScores.cuidado++
+                  greenCount++
                 } else if (R > 145 && G > 105 && B < 130 && R >= G - 10) {
-                  cellScores.transicion++
-                } else if (R >= G + 25 && R >= B + 25) {
-                  cellScores.riesgo++
+                  yellowCount++
+                  yellowPoints.push({ x, y })
+                } else if (R >= G + 25 && R >= B + 22) {
+                  redCount++
+                  redPoints.push({ x, y })
                 } else if (B >= R + 16 && B >= G + 8) {
-                  cellScores.dialogo++
+                  blueCount++
                 } else if (R > 100 && B > 95 && G < R - 10) {
-                  cellScores.produccion++
+                  purpleCount++
                 }
               }
             }
 
-            const entries = Object.entries(cellScores) as [DetectedHotspot['category'], number][]
-            entries.sort((a, b) => b[1] - a[1])
-            const [topCat, topScore] = entries[0]
+            const scores = [
+              { family: 'green' as const, val: greenCount },
+              { family: 'yellow' as const, val: yellowCount },
+              { family: 'red' as const, val: redCount },
+              { family: 'blue' as const, val: blueCount },
+              { family: 'purple' as const, val: purpleCount },
+            ].sort((a, b) => b.val - a.val)
 
-            // Umbral sensible para detectar emojis/íconos pequeños sobre el plano
-            if (topScore >= 6) {
-              hotspots.push({
-                x: Math.round(((c + 0.5) / cols) * 100),
-                y: Math.round(((r + 0.5) / rows) * 100),
-                category: topCat,
-                weight: Math.min(5, Math.max(1, Math.ceil(topScore / 18))),
+            const top = scores[0]
+            if (top.val < 6) continue
+
+            let detectedCat: DetectedHotspot['category'] = 'espacio_cuidado'
+            let valence: ValenceGroup = 'positivo'
+
+            if (top.family === 'green') {
+              // Si hay un bloque compacto es 🟢 Espacio cuidado; si es más fino/disperso es 🌱 Iniciativa
+              detectedCat = greenCount >= 18 ? 'espacio_cuidado' : 'iniciativa_proyecto'
+              valence = 'positivo'
+            } else if (top.family === 'red') {
+              // Análisis geométrico del grupo de píxeles rojos: ❤️ Corazón vs 🔴 Círculo vs 🚫 Prohibido
+              let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity
+              redPoints.forEach((p) => {
+                if (p.x < minX) minX = p.x
+                if (p.x > maxX) maxX = p.x
+                if (p.y < minY) minY = p.y
+                if (p.y > maxY) maxY = p.y
               })
+              const boxW = Math.max(1, maxX - minX + 1)
+              const boxH = Math.max(1, maxY - minY + 1)
+              const fillRatio = redPoints.length / (boxW * boxH)
 
-              if (topCat === 'cuidado') counts.espacio_cuidado++
-              if (topCat === 'transicion') counts.espacio_transicion++
-              if (topCat === 'riesgo') counts.espacio_riesgo++
-              if (topCat === 'dialogo') counts.espacio_dialogo++
-              if (topCat === 'produccion') counts.producciones_grafitis++
+              // Medir ancho arriba vs ancho abajo (el corazón es ancho arriba y termina en punta abajo)
+              const midY = minY + boxH * 0.55
+              const topPts = redPoints.filter((p) => p.y < midY)
+              const botPts = redPoints.filter((p) => p.y >= midY)
+              const topSpan = topPts.length > 0 ? Math.max(...topPts.map((p) => p.x)) - Math.min(...topPts.map((p) => p.x)) : boxW
+              const botSpan = botPts.length > 0 ? Math.max(...botPts.map((p) => p.x)) - Math.min(...botPts.map((p) => p.x)) : boxW
+
+              // Verificar si el centro superior tiene escotadura (típico de ❤️) o el centro medio está hueco (🚫)
+              const centerTopHueco = !redPoints.some(
+                (p) => Math.abs(p.x - (minX + boxW / 2)) <= boxW * 0.15 && p.y <= minY + boxH * 0.25
+              )
+
+              if (botSpan < topSpan * 0.72 && centerTopHueco) {
+                detectedCat = 'cuidado_corazon'
+                valence = 'positivo'
+              } else if (fillRatio < 0.46) {
+                detectedCat = 'exclusion_tension'
+                valence = 'riesgo'
+              } else {
+                detectedCat = 'espacio_riesgo'
+                valence = 'riesgo'
+              }
+            } else if (top.family === 'yellow') {
+              // Análisis geométrico amarillos/cálidos: ⚠️ Triángulo vs 🟡 Círculo vs 🤝 Encuentro
+              let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity
+              yellowPoints.forEach((p) => {
+                if (p.x < minX) minX = p.x
+                if (p.x > maxX) maxX = p.x
+                if (p.y < minY) minY = p.y
+                if (p.y > maxY) maxY = p.y
+              })
+              const boxW = Math.max(1, maxX - minX + 1)
+              const boxH = Math.max(1, maxY - minY + 1)
+              const midY = minY + boxH * 0.5
+              const topPts = yellowPoints.filter((p) => p.y < midY)
+              const botPts = yellowPoints.filter((p) => p.y >= midY)
+              const topSpan = topPts.length > 0 ? Math.max(...topPts.map((p) => p.x)) - Math.min(...topPts.map((p) => p.x)) : boxW
+              const botSpan = botPts.length > 0 ? Math.max(...botPts.map((p) => p.x)) - Math.min(...botPts.map((p) => p.x)) : boxW
+
+              if (topSpan < botSpan * 0.68) {
+                // Triángulo: angosto arriba, ancho abajo -> ⚠️ Situación que requiere atención
+                detectedCat = 'requiere_atencion'
+                valence = 'atencion'
+              } else if (boxW > boxH * 1.25) {
+                // Horizontal -> 🤝 Lugar de encuentro
+                detectedCat = 'lugar_encuentro'
+                valence = 'positivo'
+              } else {
+                detectedCat = 'espacio_transicion'
+                valence = 'atencion'
+              }
+            } else if (top.family === 'blue') {
+              detectedCat = 'espacio_dialogo'
+              valence = 'positivo'
+            } else {
+              detectedCat = 'producciones_grafitis'
+              valence = 'atencion'
             }
+
+            counts[detectedCat] = (counts[detectedCat] || 0) + 1
+            valenceTotals[valence] = (valenceTotals[valence] || 0) + 1
+
+            hotspots.push({
+              x: Math.round(((c + 0.5) / cols) * 100),
+              y: Math.round(((r + 0.5) / rows) * 100),
+              category: detectedCat,
+              valence,
+              weight: Math.min(5, Math.max(1, Math.ceil(top.val / 18))),
+            })
           }
         }
 
-        resolve({ counts, hotspots })
+        resolve({ counts, valenceTotals, hotspots })
       } catch {
-        resolve({ counts: {}, hotspots: [] })
+        resolve({ counts: {}, valenceTotals: { positivo: 0, atencion: 0, riesgo: 0 }, hotspots: [] })
       }
     }
-    img.onerror = () => resolve({ counts: {}, hotspots: [] })
+    img.onerror = () => resolve({ counts: {}, valenceTotals: { positivo: 0, atencion: 0, riesgo: 0 }, hotspots: [] })
     img.src = imageSrc
   })
 }
@@ -226,7 +349,11 @@ const jsonFetcher = async <T,>(url: string): Promise<T> => {
 
 function LeyendaSimbolos({ compact = false }: { compact?: boolean }) {
   const [open, setOpen] = useState(!compact)
-  const categorias = ['Características de los espacios', 'Relaciones y convivencia', 'Otros espacios']
+  const grupos: { key: ValenceGroup; title: string; badge: string }[] = [
+    { key: 'positivo', title: '🟢 Cuidado, Bienestar y Encuentro (Aspectos positivos)', badge: 'bg-emerald-100 text-emerald-900' },
+    { key: 'atencion', title: '🟡 Transición, Atención y Territorios (En observación)', badge: 'bg-amber-100 text-amber-900' },
+    { key: 'riesgo', title: '🔴 Riesgo, Exclusión y Tensiones (Alertas de convivencia)', badge: 'bg-red-100 text-red-900' },
+  ]
 
   return (
     <div className="rounded-2xl border border-[#dce9df] bg-[#f4f8f5] p-4 sm:p-5">
@@ -246,11 +373,13 @@ function LeyendaSimbolos({ compact = false }: { compact?: boolean }) {
 
       {open && (
         <div className="mt-4 space-y-4">
-          {categorias.map((cat) => (
-            <div key={cat}>
-              <p className="mb-2 text-[11px] font-bold uppercase tracking-wider text-slate-500">{cat}</p>
-              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                {ICONOS_CONVIVENCIA.filter((ic) => ic.category === cat).map((ic) => (
+          {grupos.map((gr) => (
+            <div key={gr.key}>
+              <span className={`inline-block rounded-full px-2.5 py-0.5 text-[11px] font-bold ${gr.badge}`}>
+                {gr.title}
+              </span>
+              <div className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                {ICONOS_CONVIVENCIA.filter((ic) => ic.valence === gr.key).map((ic) => (
                   <div key={ic.id} className="flex items-start gap-2.5 rounded-xl border border-slate-200/80 bg-white p-2.5">
                     <span className="text-lg leading-none">{ic.emoji}</span>
                     <div>
@@ -547,7 +676,7 @@ export function StudentPortal({ courses, student, loading = false, error, onEnte
               </p>
             )}
 
-            {/* PASO 1: SUBIR MAPA + DETECCIÓN AUTOMÁTICA + MAPAS DEL CURSO */}
+            {/* PASO 1 */}
             {step === 1 && (
               <div className="mt-6 space-y-6">
                 <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
@@ -606,13 +735,13 @@ export function StudentPortal({ courses, student, loading = false, error, onEnte
                     {previewUrl && (
                       <div className="space-y-2 overflow-hidden rounded-xl border border-slate-200 p-3 sm:col-span-2">
                         <img src={previewUrl} alt="Vista previa" className="max-h-64 w-full object-contain" />
-                        <div className="flex flex-wrap items-center gap-2 rounded-lg bg-[#f3f8f4] px-3 py-2 text-xs text-[#174b38]">
+                        <div className="flex flex-wrap items-center gap-3 rounded-lg bg-[#f3f8f4] px-3 py-2 text-xs text-[#174b38]">
                           <Sparkles size={15} className="shrink-0" />
                           {scanning ? (
-                            <span>Analizando automáticamente los símbolos colocados en el plano…</span>
+                            <span>Diferenciando símbolos positivos, de atención y de riesgo…</span>
                           ) : autoScan && autoScan.hotspots.length > 0 ? (
                             <span>
-                              <strong>Lectura automática:</strong> se detectaron <strong>{autoScan.hotspots.length}</strong> zonas con símbolos marcados en este plano.
+                              <strong>Detección automática:</strong> 🟢 {autoScan.valenceTotals.positivo} positivos · 🟡 {autoScan.valenceTotals.atencion} atención · 🔴 {autoScan.valenceTotals.riesgo} riesgo/tensión.
                             </span>
                           ) : (
                             <span>Imagen lista para guardar.</span>
@@ -685,7 +814,7 @@ export function StudentPortal({ courses, student, loading = false, error, onEnte
               </div>
             )}
 
-            {/* PASO 2: LAS 13 PREGUNTAS DE ANÁLISIS COLECTIVO + LEYENDA DE SÍMBOLOS */}
+            {/* PASO 2 */}
             {step === 2 && (
               <div className="mt-6 space-y-6">
                 <LeyendaSimbolos compact={true} />
@@ -726,7 +855,7 @@ export function StudentPortal({ courses, student, loading = false, error, onEnte
               </div>
             )}
 
-            {/* PASO 3: CUESTIONARIO 3RA JORNADA */}
+            {/* PASO 3 */}
             {step === 3 && (
               <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
                 <div className="flex items-center gap-2 text-[#174b38]">
@@ -858,7 +987,7 @@ export function StudentPortal({ courses, student, loading = false, error, onEnte
               </section>
             )}
 
-            {/* PASO 4: CARTELERA COLECTIVA */}
+            {/* PASO 4 */}
             {step === 4 && (
               <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
                 <h2 className="text-lg font-semibold">Cartelera Institucional: &ldquo;En nuestra escuela logramos...&rdquo;</h2>
