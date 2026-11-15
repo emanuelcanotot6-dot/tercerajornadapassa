@@ -30,11 +30,11 @@ const navItems: { label: Section; icon: typeof LayoutDashboard }[] = [
 ]
 
 const PLANOS_ESCUELA = [
-  { id: 'Teoría - Planta baja', short: 'Teoría PB', img: '/planos/teoria-pb.jpg' },
-  { id: 'Teoría - Planta alta', short: 'Teoría PA', img: '/planos/teoria-pa.jpg' },
-  { id: 'Talleres - Planta baja', short: 'Talleres PB', img: '/planos/talleres-pb.jpg' },
-  { id: 'Talleres - Planta alta', short: 'Talleres PA', img: '/planos/talleres-pa.jpg' },
-  { id: 'Patios - Espacios comunes', short: 'Patios', img: '/planos/patios.jpg' },
+  { id: 'Teoría - Planta baja', short: 'Teoría PB', img: '/planos/Teoria Planta Baja1.png' },
+  { id: 'Teoría - Planta alta', short: 'Teoría PA', img: '/planos/Teoria Planta alta-1.png' },
+  { id: 'Talleres - Planta baja', short: 'Talleres PB', img: '/planos/Taller planta baja.png' },
+  { id: 'Talleres - Planta alta', short: 'Talleres PA', img: '/planos/Taller planta Alta.png' },
+  { id: 'Patios - Espacios comunes', short: 'Patios', img: '/planos/Taller Patios.png' },
 ]
 
 const PREGUNTAS_LABELS: { key: string; label: string }[] = [
@@ -472,7 +472,6 @@ export function ObservatoryApp({
               </div>
 
               <div className="grid gap-5 xl:grid-cols-[1.45fr_1fr]">
-                {/* Mapa de calor real */}
                 <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
                   <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-4">
                     <div className="flex items-center gap-2">
@@ -554,7 +553,6 @@ export function ObservatoryApp({
                   </div>
                 </section>
 
-                {/* Gráficos de barras resumidos */}
                 <div className="space-y-5">
                   <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
                     <h2 className="text-sm font-bold text-slate-900">Símbolos detectados automáticamente</h2>
@@ -606,7 +604,6 @@ export function ObservatoryApp({
                 </div>
               </div>
 
-              {/* Reflexiones de las 13 preguntas */}
               <section>
                 <h2 className="mb-3 text-base font-semibold text-slate-900">Reflexiones colectivas de las 13 preguntas ({filteredAnalisis.length})</h2>
                 {filteredAnalisis.length === 0 ? (
